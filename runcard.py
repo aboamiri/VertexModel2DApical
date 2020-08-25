@@ -56,19 +56,19 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
         T.minimize_dynamically(2000, 0.1, write_freq, False, False)
         for v in T.ListVertex:
             if len(v.connectedEdges)==4:
-                T.open_vertex_to_cell(v,delta)
+                T.open_vertex_to_cell(v)
         W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
 
     elif sim_type=='3fold':
         v_cent = T.find_vertex_at_center()
-        T.open_vertex_to_cell(v_cent,delta)
+        T.open_vertex_to_cell(v_cent)
         W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
 
     elif sim_type=='both_sides':
         v_cent = T.find_vertex_at_center()
         e = v_cent.connectedEdges[0]
-        T.open_vertex_to_cell(e.tailVertex,delta)
-        T.open_vertex_to_cell(e.headVertex,delta)
+        T.open_vertex_to_cell(e.tailVertex)
+        T.open_vertex_to_cell(e.headVertex)
         W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
 
     elif sim_type=='randomized_packing':
