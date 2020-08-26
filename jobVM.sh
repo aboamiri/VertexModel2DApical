@@ -42,7 +42,7 @@
 
 # create local folder on ComputeNode
 #scratch=/scratch/$USER/$SLURM_JOB_ID
-#mkdir -p $scratch 
+#mkdir -p $scratch
 
 # copy all your NEEDED data to ComputeNode
 #cp /home/aamiri/Documents/VertexModel/y2019/overlap $scratch
@@ -54,7 +54,7 @@
 #module load <module_name>
 module load anaconda3
 module load python3
-	
+
 # if needed add export variables here
 
 ################
@@ -62,7 +62,7 @@ module load python3
 # run the program
 #
 ################
-srun python runcard.py randomized_tension 18 0.01 200000 0.1
+srun python runcard.py probing_vertices 18 0.01 10000 0.1
 #$scratch/ /home/aamiri/Documents/VertexModel/y2019/overlap
 
 # copy results to data

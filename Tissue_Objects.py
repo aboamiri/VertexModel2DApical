@@ -159,6 +159,7 @@ class Vertex:
         self.d2W_dh2 = 0
         self.Norm_dW_dh = 0
         self.last_tension = 0#if an edge shrinks to become 4-fold vertex, this vertex will remember the tension of that edge
+        self.probing_k = 0
 
     def set_force_to_zero(self):
         self.dW_dv = Point(0,0,0)
@@ -442,6 +443,7 @@ class Tissue:
         self.ListVertex = []
         self.ListEdge = []
         self.delta_l = 0.1*np.sqrt(self.A0c)
+        self.is_with_T1_trans = False
 
     def max_cell_id(self):
         max_id = 0
@@ -719,6 +721,28 @@ class Tissue:
         e2_i = e1_i + int((c.ListEdges)/2)
         E1, E2 = c.ListEdges[e1_i], c.ListEdges[e2_i]
 
+    def probe_vertex(self, v0, n_steps, old_coords):
+        """here we want to apply out of plane force to vertex v.
+        only vertex v can move out of plane, the rest will only
+        have in-plane movements."""
+        self.is_with_T1_trans = False
+        eps_val = 1e-20
+        f_out = Point(0,0,-0.01)
+        dt, dampCoef = 0.1, 1
+        for s in range(n_steps+1):
+            self.update_derivatives_analytically()
+            v0.dW_dv = v0.dW_dv + f_out
+            for v in self.ListVertex:
+                velocity = v.dW_dv/(-dampCoef)
+                dr = velocity.X(dt)
+                v.coord = v.coord + dr
+        v0.probing_k = abs(f_out.z)/(abs(v0.coord.z)+eps_val)
+
+        for i in range(len(old_coords)):#now we move back all vertices to their oroginal position
+            self.ListVertex[i].coord = old_coords[i]
+
+
+
     def similar_or_new_vertex(self, vcoord, vtype):
         cut = 1e-6
         for v in self.ListVertex:
@@ -838,6 +862,7 @@ class Tissue:
     def minimize_dynamically(self, n_steps, dt=0.1, write_freq=10, is_writing=True, is_with_T1_trans=True):
         """to minimize ..."""
         #print(dt, write_freq)
+        self.is_with_T1_trans = is_with_T1_trans
         W_steps = []
         dampCoef = 1.0
         for s in range(n_steps+1):
@@ -853,9 +878,9 @@ class Tissue:
                         v.estimate_second_derivative(delta_v)
                 self.write_tissue_to_file("data/T"+str(int(s))+".json", True)
                 W_steps.append(self.W())
-            if is_with_T1_trans and s%2:
+            if self.is_with_T1_trans and s%2:
                 self.shrink_small_edges()
-            if is_with_T1_trans and s%4==0:
+            if self.is_with_T1_trans and s%4==0:
                 self.open_four_fold_vertices()
 
         self.shrink_small_edges()
@@ -979,6 +1004,8 @@ class Tissue:
             tissue_dict["d2W_dv2"] = d2W
         dWdh = [v.Norm_dW_dh for v in self.ListVertex]
         tissue_dict["dW_dh"] = dWdh
+        k_probe = [v.probing_k for v in self.ListVertex]
+        tissue_dict["probing_k"] = k_probe
         edge_list = []
         [edge_list.append([e.crossBdry, e.tailVertex.storing_order, e.headVertex.storing_order, e.q_tail.x, e.q_tail.y, e.q_head.x, e.q_head.y, e.lineTension]) for e in self.ListEdge]
         tissue_dict["edges"] = edge_list

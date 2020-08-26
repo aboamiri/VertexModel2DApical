@@ -12,6 +12,7 @@ from math import floor
 import json
 import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use('Agg')
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.collections import LineCollection
@@ -162,7 +163,7 @@ def plot_cell_edges(tail_edges, dl_edges, image_name):
     plt.close()
 
 def visualize_frame_jsonfile(datafile, image_name, color_type):
-    if color_type=='d2W_dv2' or color_type=='dW_dh':
+    if color_type=='d2W_dv2' or color_type=='dW_dh' or color_type=='probing':
         fig = plt.figure(figsize=(17,9.5))
     else:
         fig = plt.figure(figsize=(14,14))
@@ -236,7 +237,10 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
         x = [v[0] for v in ver_list]
         y = [v[1] for v in ver_list]
         v_area = 40*np.ones(len(colors))
-        sc = ax.scatter(x, y, s=v_area, c=colors)#, alpha=0.0)
+        if min(colors)>0:
+            sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+        else:
+            sc = ax.scatter(x, y, s=v_area, c=colors)#, alpha=0.0)
         clb = plt.colorbar(sc)
         clb.ax.set_title('$d^2W/dv^2$')
     elif color_type=='dW_dh':
@@ -244,9 +248,20 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
             x = [v[0] for v in ver_list]
             y = [v[1] for v in ver_list]
             v_area = 40*np.ones(len(colors))
-            sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+            if min(colors)>0:
+                sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+            else:
+                sc = ax.scatter(x, y, s=v_area, c=colors)#, alpha=0.0)
             clb = plt.colorbar(sc)
             clb.ax.set_title('$dW/dv$')
+    elif color_type=='probing':
+            colors = data["probing_k"]
+            x = [v[0] for v in ver_list]
+            y = [v[1] for v in ver_list]
+            v_area = 40*np.ones(len(colors))
+            sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+            clb = plt.colorbar(sc)
+            clb.ax.set_title('$k_\delta$')
 
     # Turn off tick labels
     ax.set_yticklabels([])

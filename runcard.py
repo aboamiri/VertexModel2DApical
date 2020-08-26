@@ -11,7 +11,7 @@ parser=argparse.ArgumentParser(
     In this model the vertices move dynamically down the gradient of a work function W.
     mu dX/dt = -dW/dX. The simulation runs for given "n_steps" steps.''',
     epilog="""run with the correct arguments. """)
-parser.add_argument('sim_type', type=str, default='randomized_tension', help='choose from: "randomized_tension", "quadruple", "3fold", "4fold", and "randomized_packing"')
+parser.add_argument('sim_type', type=str, default='randomized_tension', help='choose from: "probing_vertices", "randomized_tension", "quadruple", "3fold", "4fold", and "randomized_packing"')
 parser.add_argument('Nxy', type=int, default=8, help='the given integer value will be number of cells in both x and y direction. Please choose an even number!')
 parser.add_argument('gamma', type=float, default=0.01, help='average line tension')
 parser.add_argument('n_steps', type=int, default=5000, help='number of simulation time steps')
@@ -43,6 +43,7 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
     T.create_hexagonal_tissue(Nx, Ny, Kc, A0c, Ta, Gc)
     T.update_derivatives_analytically()
 
+    T.is_with_T1_trans = True
     T.minimize_dynamically(1000, 0.1, 0, False, False)
 
     delta = 0.01*np.sqrt(T.A0c) # opening length of edge
@@ -115,8 +116,49 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
             T.ListEdge[i].lineTension = Tvalues[i]
         W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
 
-    datafile = 'data/T'+str(n_steps)+'.json'
+    elif sim_type=='probing_vertices':
+        for i in range(int(0.2*len(T.ListEdge))):
+            n_e = len(T.ListEdge)
+            eid = random.randrange(n_e)
+            e = T.ListEdge[eid]
+            tx, ty = e.tailVertex.coord.x, e.tailVertex.coord.y
+            if is_point_near_bdr(tx, ty, T.SystemSize.x, T.SystemSize.y):
+                continue
+
+            if e.crossBdry or e.c1.crossBdry or e.c2.crossBdry:
+                continue
+            if len(e.c1.ListEdges)>4 and len(e.c2.ListEdges)>4:
+                T.flip_edge(e)
+        T.minimize_dynamically(4000, dt, write_freq, False, False)
+        gamma_mean = T.Ta
+        gamma_std = T.Ta/5.0
+        Tvalues = np.random.normal(gamma_mean, gamma_std, len(T.ListEdge))
+        for i in range(len(Tvalues)):
+            if T.ListEdge[i].c1.crossBdry or T.ListEdge[i].c2.crossBdry:
+                continue
+            T.ListEdge[i].lineTension = Tvalues[i]
+        W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
+
+        old_coords = []
+        for v in T.ListVertex:
+            old_coords.append(v.coord)
+
+        print("number of vertices: "+str(len(T.ListVertex)))
+        for v in T.ListVertex:
+            T.probe_vertex(v, 2000, old_coords)
+            prt_str = "vertex id: "+str(v.storing_order)+", k_d="+"{:.3f}".format(v.probing_k)
+            prt_str = prt_str + ", polyclass of neighb cells: "
+            for cor in v.ListCorners:
+                prt_str = prt_str + str(len(cor.c.ListEdges))+" "
+            print(prt_str)
+        T.write_tissue_to_file('data/T_final.json', True)
+
+
+    datafile = 'data/T_final.json'
     color_type = 'dW_dh'
+    image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+    visualize_frame_jsonfile(datafile, image_name, color_type)
+    color_type = 'probing'
     image_name = 'gamma'+str(Ta)+color_type+'.pdf'
     visualize_frame_jsonfile(datafile, image_name, color_type)
     color_type = 'd2W_dv2'
