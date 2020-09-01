@@ -160,6 +160,7 @@ class Vertex:
         self.Norm_dW_dh = 0
         self.last_tension = 0#if an edge shrinks to become 4-fold vertex, this vertex will remember the tension of that edge
         self.probing_k = 0
+        self.final_opening_area = 0
 
     def set_force_to_zero(self):
         self.dW_dv = Point(0,0,0)
@@ -297,6 +298,7 @@ class Cell:
         self.area = 0
         self.perimeter = 0
         self.crossBdry = False
+        self.storing_order = -1
 
     def remove_edge(self, e):
         #print('cell:'+str(self.Number)+'--------   Ne before removing: '+str(len(self.ListEdges)))
@@ -467,9 +469,12 @@ class Tissue:
             e.headVertex.connectedEdges.append(e)
             e_storing_order = e_storing_order + 1
 
+        c_storing_order=0
         for c in self.ListCell:
             c.order_edge_list()
             c.update_corners()
+            c.storing_order = c_storing_order
+            c_storing_order= c_storing_order + 1
 
     def W(self):
         self.energy = 0
@@ -485,6 +490,8 @@ class Tissue:
         return self.energy
 
     def shrink_edge_to_vertex(self, e):
+        if len(e.tailVertex.connectedEdges)>3 or len(e.headVertex.connectedEdges)>3:# at this point we are avoinding 5-fold vertices
+            return
         #tail vertex is being removed
         v_tail, v_head = e.tailVertex, e.headVertex
         v_head.last_tension = e.lineTension
@@ -741,6 +748,28 @@ class Tissue:
         for i in range(len(old_coords)):#now we move back all vertices to their oroginal position
             self.ListVertex[i].coord = old_coords[i]
 
+    def check_vertex_opening(self, v0, n_steps):
+        """to check if a vertex can sunccesfully open to a cell"""
+        #for e in v0.connectedEdges:
+        #    if e.crossBdry:
+        #        return
+        for cor in v0.ListCorners:
+            if cor.c.crossBdry:
+                return
+
+        self.open_vertex_to_cell(v0)
+
+        self.is_with_T1_trans = False
+        dt, dampCoef = 0.1, 1.0
+        for s in range(n_steps+1):
+            self.update_derivatives_analytically()
+            v0.dW_dv = v0.dW_dv
+            for v in self.ListVertex:
+                velocity = v.dW_dv/(-dampCoef)
+                dr = velocity.X(dt)
+                v.coord = v.coord + dr
+        v0.final_opening_area = self.ListCell[-1].area
+
 
 
     def similar_or_new_vertex(self, vcoord, vtype):
@@ -779,8 +808,9 @@ class Tissue:
         self.ListVertex.remove(v)
         v.order_connected_edges()
         new_vert_coords = []
+        #self.delta_l
         for e in v.connectedEdges:
-            nv_coord = e.get_vertex_opening_along(v_coord, v, self.delta_l)
+            nv_coord = e.get_vertex_opening_along(v_coord, v, 0.015)
             new_vert_coords.append(nv_coord)
         new_cell_listEdges = []
         new_cell = Cell(self.max_cell_id()+1, 1, self.Kc, self.A0c, self.Ta, self.Gc)
@@ -810,11 +840,14 @@ class Tissue:
         new_cell.ListVertices =  list_new_verts
         new_cell.ListEdges =    list_new_edges
 
+        for E in new_cell.ListEdges:
+            E[0].lineTension = self.Ta
+
         print(len(new_cell.ListEdges), len(new_cell.ListVertices))
 
         self.ListCell.append(new_cell)
-        for v in new_cell.ListVertices:
-            print(v.Number)
+        #for v in new_cell.ListVertices:
+        #    print(v.Number)
 
         for c in self.ListCell:
             c.update_geometric_info()
@@ -988,6 +1021,58 @@ class Tissue:
         #for v in self.ListVertex:
         #    dr = Point(random.uniform(-1.0,1.0), random.uniform(-1.0,1.0), 0)
         #    v.coord = v.coord +dr.X(0.2)
+    def build_tissue_from_file(self, datafile):
+        self.ListCell, self.ListVertex, self.ListEdge = [], [], []
+        with open(datafile, 'r') as fp:
+            data = json.load(fp)
+
+        self.SystemSize = Quadrant(data["box_size"][0], data["box_size"][1])
+        self.isPeriodic = data["is_periodic"]
+
+        ver_coords = data["vertices"]
+        for v_coord in ver_coords:
+            v = self.similar_or_new_vertex(Point(v_coord[0], v_coord[1], 0), 1)
+
+        self.Kc, self.A0c, self.Ta, self.Gc = 1.0, 1.0, data["lineTension"], 0
+
+        for cid in range(data["n_cells"]):
+            cell = Cell(cid, 1, self.Kc, self.A0c, self.Ta, self.Gc)
+            self.ListCell.append(cell)
+            cell.storing_order = cid
+
+        tissue_edges = data["edges"]
+        for te in tissue_edges:
+            crosses, t_id, h_id, t_qx, t_qy, h_qx, h_qy, tension, c1_id, c2_id = te[0], te[1], te[2], te[3], te[4], te[5], te[6], te[7], te[8], te[9]
+            e = self.similar_or_new_edge(self.ListVertex[t_id], self.ListVertex[h_id], tension, Quadrant(t_qx, t_qy), Quadrant(h_qx, h_qy))
+            e[0].crossBdry = crosses
+            e[0].c1 = self.ListCell[c1_id]
+            e[0].c2 = self.ListCell[c2_id]
+
+        cells_ListVertex_ids = data["cells_ListVertex_ids"]
+        cells_ListEdge_ids = data["cells_ListEdge_ids"]
+        cells_bdry_crossing = data["cells_bdry_crossing"]
+
+        cid = 0
+        for cell_verts, cell_edges, cell_crossing in zip(cells_ListVertex_ids, cells_ListEdge_ids, cells_bdry_crossing):
+            cell = self.ListCell[cid]
+            for iv in range(len(cell_verts)):
+                cell.ListVertices.append(self.ListVertex[cell_verts[iv]])
+            #cell.ListVertices = self.ListVertex[np.array(cell_verts)]
+            cell.crossBdry = cell_crossing
+            cell.ListEdges = []
+            for E in cell_edges:
+                cell.ListEdges.append((self.ListEdge[E[0]], E[1]))
+            cell.update_geometric_info()
+            cid = cid + 1
+
+        self.update_vertex_connections()
+
+#        eid = 0
+#        for te in tissue_edges:
+#            crosses, t_id, h_id, t_qx, t_qy, h_qx, h_qy, tension, c1_id, c2_id = te[0], te[1], te[2], te[3], te[4], te[5], te[6], te[7], te[8], te[9]
+#            self.ListEdge[eid].c1 = self.ListCell[c1_id]
+#            self.ListEdge[eid].c2 = self.ListCell[c2_id]
+#            eid = eid+1
 
     def write_tissue_to_file(self, filename, write_d2W_dv2):
         tissue_dict = {}
@@ -996,6 +1081,7 @@ class Tissue:
         tissue_dict["n_vertices"] = len(self.ListVertex)
         tissue_dict["n_edges"] = len(self.ListEdge)
         tissue_dict["box_size"]=[self.SystemSize.x, self.SystemSize.y]
+        tissue_dict["lineTension"] = self.Ta
         vertex_list=[]
         [vertex_list.append([v.coord.x, v.coord.y, v.coord.z]) for v in self.ListVertex]
         tissue_dict["vertices"]=vertex_list
@@ -1006,23 +1092,36 @@ class Tissue:
         tissue_dict["dW_dh"] = dWdh
         k_probe = [v.probing_k for v in self.ListVertex]
         tissue_dict["probing_k"] = k_probe
+        area_probe = [abs(v.final_opening_area)+1e-6 for v in self.ListVertex]
+        tissue_dict["inserting_area"] = area_probe
         edge_list = []
-        [edge_list.append([e.crossBdry, e.tailVertex.storing_order, e.headVertex.storing_order, e.q_tail.x, e.q_tail.y, e.q_head.x, e.q_head.y, e.lineTension]) for e in self.ListEdge]
+        [edge_list.append([e.crossBdry, e.tailVertex.storing_order, e.headVertex.storing_order, e.q_tail.x, e.q_tail.y, e.q_head.x, e.q_head.y, e.lineTension, e.c1.storing_order, e.c2.storing_order]) for e in self.ListEdge]
         tissue_dict["edges"] = edge_list
 
         cell_list = []
         c_area = []
+        cells_ListVertex_ids = []
+        cells_ListEdge_ids = []
+        cells_bdry_crossing = []
         for c in self.ListCell:
             if c.crossBdry:
-                continue
+                cells_bdry_crossing.append(True)
+            else:
+                cells_bdry_crossing.append(False)
+            #    continue
             c_area.append(c.area)
             #c_edges = np.zeros((len(c.ListEdges)+1, 2))
             c_edges = []
             #c_edges[0,:]=np.array([c.ListEdges[0][0].tailVertex.coord.x, c.ListEdges[0][0].tailVertex.coord.y])
             #c_edges.append([c.ListEdges[0][0].tailVertex.coord.x, c.ListEdges[0][0].tailVertex.coord.y])
+            cell_verts_ids = []
+            cell_edges_ids = []
+            for v in c.ListVertices:
+                cell_verts_ids.append(v.storing_order)
             eid=0
             for E in c.ListEdges:
                 e, d = E[0], E[1]
+                cell_edges_ids.append([e.storing_order, d])
                 #e.get_dl()
                 #c_edges[eid+1,:] = np.array([e.dl.x, e.dl.y])
                 if d:
@@ -1032,7 +1131,13 @@ class Tissue:
                 eid = eid+ 1
             #print(c_edges)
             cell_list.append(c_edges)
+            cells_ListVertex_ids.append(cell_verts_ids)
+            cells_ListEdge_ids.append(cell_edges_ids)
         tissue_dict["cells"] = cell_list
+        tissue_dict["cells_ListVertex_ids"] = cells_ListVertex_ids
+        tissue_dict["cells_ListEdge_ids"] = cells_ListEdge_ids
+        tissue_dict["cells_bdry_crossing"] = cells_bdry_crossing
+
 
         tissue_dict["cell_area"]= c_area
         if filename.endswith(".json"):

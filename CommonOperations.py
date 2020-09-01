@@ -163,7 +163,7 @@ def plot_cell_edges(tail_edges, dl_edges, image_name):
     plt.close()
 
 def visualize_frame_jsonfile(datafile, image_name, color_type):
-    if color_type=='d2W_dv2' or color_type=='dW_dh' or color_type=='probing':
+    if color_type=='d2W_dv2' or color_type=='dW_dh' or color_type=='probing' or color_type=='opening_area':
         fig = plt.figure(figsize=(17,9.5))
     else:
         fig = plt.figure(figsize=(14,14))
@@ -179,7 +179,7 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
     line_coords = []
     edge_colors = []
     for te in tissue_edges:
-        crosses, t_id, h_id, t_qx, t_qy, h_qx, h_qy, tension = te[0], te[1], te[2], te[3], te[4], te[5], te[6], te[7]
+        crosses, t_id, h_id, t_qx, t_qy, h_qx, h_qy, tension, c1_id, c2_id = te[0], te[1], te[2], te[3], te[4], te[5], te[6], te[7], te[8], te[9]
         cross2 = abs(t_qx)+abs(t_qy)+abs(h_qx)+abs(h_qy)
         if crosses or cross2:
             continue
@@ -192,12 +192,14 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
     lcc = plt.colorbar(lc)
     lcc.ax.set_title('$\gamma$')
 
-
+    cells_bdry_crossing = data["cells_bdry_crossing"]
     num_polygons = len(data["cells"])#data["n_cells"]
 
     nematic_coords = []
     nematic_colors = []
     for cid in range(num_polygons):
+        if cells_bdry_crossing[cid]:
+            continue
         c_edges = data["cells"][cid]
         #c_verts =  get_cell_vertices(c_edges, data["edges"], data["vertices"], data["box_size"][0], data["box_size"][1])
         Q_val, Q_vec, cell_cent = get_cell_elongation(c_edges)
@@ -213,6 +215,8 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
 
     poly_class = []
     for cid in range(num_polygons):
+        if cells_bdry_crossing[cid]:
+            continue
         c_edges = data["cells"][cid]
         num_sides = len(c_edges)
         poly_class.append(num_sides)
@@ -262,6 +266,14 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
             sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
             clb = plt.colorbar(sc)
             clb.ax.set_title('$k_\delta$')
+    elif color_type=='opening_area':
+            colors = data["inserting_area"]
+            x = [v[0] for v in ver_list]
+            y = [v[1] for v in ver_list]
+            v_area = 40*np.ones(len(colors))
+            sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+            clb = plt.colorbar(sc)
+            clb.ax.set_title('$a_v$')
 
     # Turn off tick labels
     ax.set_yticklabels([])
