@@ -16,6 +16,7 @@ parser.add_argument('Nxy', type=int, default=8, help='the given integer value wi
 parser.add_argument('gamma', type=float, default=0.01, help='average line tension')
 parser.add_argument('n_steps', type=int, default=5000, help='number of simulation time steps')
 parser.add_argument('dt', type=float, default=0.1, help='size of time steps')
+parser.add_argument('inserting_gamma', type=float, default=0.1, help='line tension for the inserting cells')
 args=parser.parse_args()
 
 if not os.path.exists("data"):
@@ -33,12 +34,18 @@ def visulaise_frames(n_steps, skip, color_type):
         image_name = "images/t"+str(i).zfill(5)+".png"
         visualize_frame_jsonfile(data_name, image_name, color_type)
 
-def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
+def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt, inserting_gamma):
     """
     First a regular hexagonal tissue with given arguments is creatred.
     Next: it runs for 1000 steps to move tissue near force balance,
     before I start the actual simulation mode, which is given as "sim_type".
     """
+    print("inserting_gamma:"+str(inserting_gamma))
+    if not os.path.exists(str(inserting_gamma)+"/data"):
+        os.makedirs(str(inserting_gamma)+"/data")
+    if not os.path.exists(str(inserting_gamma)+"/images"):
+        os.makedirs(str(inserting_gamma)+"/images")
+
     T = Tissue(Ta, Kc, A0c, Gc)
     T.create_hexagonal_tissue(Nx, Ny, Kc, A0c, Ta, Gc)
     T.update_derivatives_analytically()
@@ -117,7 +124,7 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
         W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
 
     elif sim_type=='probing_vertices':
-        for i in range(int(0.2*len(T.ListEdge))):
+        for i in range(int(0.15*len(T.ListEdge))):
             n_e = len(T.ListEdge)
             eid = random.randrange(n_e)
             e = T.ListEdge[eid]
@@ -129,7 +136,7 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
                 continue
             if len(e.c1.ListEdges)>4 and len(e.c2.ListEdges)>4:
                 T.flip_edge(e)
-        T.minimize_dynamically(4000, dt, write_freq, False, False)
+        T.minimize_dynamically(1000, dt, write_freq, False, False)
         gamma_mean = T.Ta
         gamma_std = T.Ta/5.0
         Tvalues = np.random.normal(gamma_mean, gamma_std, len(T.ListEdge))
@@ -137,7 +144,7 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
             if T.ListEdge[i].c1.crossBdry or T.ListEdge[i].c2.crossBdry:
                 continue
             T.ListEdge[i].lineTension = Tvalues[i]
-        W_steps = T.minimize_dynamically(n_steps, dt, write_freq, True, True)
+        W_steps = T.minimize_dynamically(10000, dt, write_freq, True, True)
 
         old_coords = []
         for v in T.ListVertex:
@@ -145,26 +152,64 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt):
 
         print("number of vertices: "+str(len(T.ListVertex)))
         for v in T.ListVertex:
-            T.probe_vertex(v, 2000, old_coords)
+            T.probe_vertex(v, 500, old_coords)
             prt_str = "vertex id: "+str(v.storing_order)+", k_d="+"{:.3f}".format(v.probing_k)
             prt_str = prt_str + ", polyclass of neighb cells: "
             for cor in v.ListCorners:
                 prt_str = prt_str + str(len(cor.c.ListEdges))+" "
             print(prt_str)
         T.write_tissue_to_file('data/T_final.json', True)
+        datafile = 'data/T_final.json'
+        color_type = 'dW_dh'
+        image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+        visualize_frame_jsonfile(datafile, image_name, color_type)
+        color_type = 'probing'
+        image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+        visualize_frame_jsonfile(datafile, image_name, color_type)
+
+        color_type = 'd2W_dv2'
+        image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+        visualize_frame_jsonfile(datafile, image_name, color_type)
+        visulaise_frames(n_steps, write_freq, color_type)
+    elif sim_type=='check_vertex_opening':
+        #now we check the vertex opening
+        print("number of vertices: "+str(len(T.ListVertex)))
+        area_opening = []
+        T.build_tissue_from_file("data/T_final.json")
+        for vid in range(len(T.ListVertex)):
+            v = T.ListVertex[vid]
+            prt_str = "vertex id: "+str(v.storing_order)
+            prt_str = prt_str + ", polyclass of neighb cells: "
+            for cor in v.ListCorners:
+                prt_str = prt_str + str(len(cor.c.ListEdges))+" "
+
+            T.check_vertex_opening(v, 1000, inserting_gamma)
+            prt_str = prt_str +", a_f="+"{:.3f}".format(v.final_opening_area)
+            print(prt_str)
+            area_opening.append(v.final_opening_area)
+            T.build_tissue_from_file("data/T_final.json")
+
+        for iv in range(len(T.ListVertex)):
+            T.ListVertex[iv].final_opening_area = area_opening[iv]
+
+        T.write_tissue_to_file(str(inserting_gamma)+'/data/rebuilt_T_final.json', True)
+        datafile = str(inserting_gamma)+'/data/rebuilt_T_final.json'
+        color_type = 'opening_area'
+        image_name = str(inserting_gamma)+'/images/inserting_gamma'+str(inserting_gamma)+color_type+'.pdf'
+        make_histogram_plots(str(inserting_gamma)+'/data/', str(inserting_gamma)+'/images/')
 
 
-    datafile = 'data/T_final.json'
-    color_type = 'dW_dh'
-    image_name = 'gamma'+str(Ta)+color_type+'.pdf'
-    visualize_frame_jsonfile(datafile, image_name, color_type)
-    color_type = 'probing'
-    image_name = 'gamma'+str(Ta)+color_type+'.pdf'
-    visualize_frame_jsonfile(datafile, image_name, color_type)
-    color_type = 'd2W_dv2'
-    image_name = 'gamma'+str(Ta)+color_type+'.pdf'
-    visualize_frame_jsonfile(datafile, image_name, color_type)
-    visulaise_frames(n_steps, write_freq, color_type)
+    #datafile = 'data/T_final.json'
+    #color_type = 'dW_dh'
+    #image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+    #visualize_frame_jsonfile(datafile, image_name, color_type)
+    #color_type = 'probing'
+    #image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+    #visualize_frame_jsonfile(datafile, image_name, color_type)
+    #color_type = 'd2W_dv2'
+    #image_name = 'gamma'+str(Ta)+color_type+'.pdf'
+    #visualize_frame_jsonfile(datafile, image_name, color_type)
+    #visulaise_frames(n_steps, write_freq, color_type)
     return T, W_steps
 
 sim_type = sys.argv[1]
@@ -177,6 +222,8 @@ n_steps = int(sys.argv[4])
 
 dt = float(sys.argv[5])
 
+inserting_gamma = float(sys.argv[6])
+
 Kc, A0c, Gc = 1.0, 1.0, 0
 
-run_simulation(Nxy, Nxy, gamma, Kc, A0c, Gc, sim_type, n_steps, dt)
+run_simulation(Nxy, Nxy, gamma, Kc, A0c, Gc, sim_type, n_steps, dt, inserting_gamma)

@@ -62,7 +62,7 @@ module load python3
 # run the program
 #
 ################
-srun python runcard.py probing_vertices 18 0.01 10000 0.1
+srun python runcard.py check_vertex_opening 18 0.02 10000 0.1 0.022
 #$scratch/ /home/aamiri/Documents/VertexModel/y2019/overlap
 
 # copy results to data

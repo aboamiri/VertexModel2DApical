@@ -748,7 +748,7 @@ class Tissue:
         for i in range(len(old_coords)):#now we move back all vertices to their oroginal position
             self.ListVertex[i].coord = old_coords[i]
 
-    def check_vertex_opening(self, v0, n_steps):
+    def check_vertex_opening(self, v0, n_steps, inserting_gamma):
         """to check if a vertex can sunccesfully open to a cell"""
         #for e in v0.connectedEdges:
         #    if e.crossBdry:
@@ -757,7 +757,7 @@ class Tissue:
             if cor.c.crossBdry:
                 return
 
-        self.open_vertex_to_cell(v0)
+        self.open_vertex_to_cell(v0, inserting_gamma)
 
         self.is_with_T1_trans = False
         dt, dampCoef = 0.1, 1.0
@@ -803,7 +803,7 @@ class Tissue:
         elif e1.c2==e2.c1 or e1.c2==e2.c2:
             return e1.c2
 
-    def open_vertex_to_cell(self, v):
+    def open_vertex_to_cell(self, v, inserting_gamma):
         v_coord = v.coord
         self.ListVertex.remove(v)
         v.order_connected_edges()
@@ -813,7 +813,7 @@ class Tissue:
             nv_coord = e.get_vertex_opening_along(v_coord, v, 0.015)
             new_vert_coords.append(nv_coord)
         new_cell_listEdges = []
-        new_cell = Cell(self.max_cell_id()+1, 1, self.Kc, self.A0c, self.Ta, self.Gc)
+        new_cell = Cell(self.max_cell_id()+1, 1, self.Kc, self.A0c, inserting_gamma, self.Gc)
 
         list_new_verts = []
         for vn, ec in zip(new_vert_coords, v.connectedEdges):
@@ -829,7 +829,7 @@ class Tissue:
             vp = list_new_verts[vp_idx]
             vn = list_new_verts[vn_idx]
 
-            new_E = self.similar_or_new_edge(vp, vn, self.Ta, Quadrant(0,0), Quadrant(0,0))
+            new_E = self.similar_or_new_edge(vp, vn, inserting_gamma, Quadrant(0,0), Quadrant(0,0))
             new_E[0].crossBdry, new_E[0].c1 = False, new_cell
             new_E[0].c2 = self.cell_between_edges(v.connectedEdges[vp_idx], v.connectedEdges[vn_idx])
             new_E[0].c2.add_vertex(vp)
@@ -841,7 +841,7 @@ class Tissue:
         new_cell.ListEdges =    list_new_edges
 
         for E in new_cell.ListEdges:
-            E[0].lineTension = self.Ta
+            E[0].lineTension = inserting_gamma
 
         print(len(new_cell.ListEdges), len(new_cell.ListVertices))
 

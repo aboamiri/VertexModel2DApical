@@ -17,6 +17,7 @@ from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.collections import LineCollection
 from matplotlib import colors as mcolors
+from Tissue_Objects import *
 
 
 # ===========  Eleongation tensor ============
@@ -286,4 +287,89 @@ def visualize_frame_jsonfile(datafile, image_name, color_type):
     plt.xlim([-0.11,0.05+data["box_size"][0]])
     plt.ylim([-0.11,0.05+data["box_size"][1]])
     plt.savefig(image_name, dpi=300)
+    plt.close()
+
+def make_histogram_plots(reading_address, saving_address):
+    with open("data/T_final.json", 'r') as fp:
+        data0 = json.load(fp)
+
+    T = Tissue(0.02, 1, 1, 0)
+    T.build_tissue_from_file("data/T_final.json")
+    crossing = []
+    for v in T.ListVertex:
+        for cor in v.ListCorners:
+            if cor.c.crossBdry:
+                crossing.append(True)
+            else:
+                crossing.append(False)
+
+
+    with open(reading_address+"rebuilt_T_final.json", 'r') as fp:
+        data = json.load(fp)
+
+    K_delta = data0["probing_k"]
+    inserting_area = data["inserting_area"]
+
+    K_delta_opened, K_delta_closed = [], []
+    gamma_mean_opened, gamma_mean_closed = [], []
+    gamma_max_opened, gamma_max_closed = [], []
+    for iv in range(len(T.ListVertex)):
+        v = T.ListVertex[iv]
+        if len(v.connectedEdges)>3:
+            continue
+        gammas = []
+        for e in v.connectedEdges:
+            gammas.append(e.lineTension)
+        gammas = np.array(gammas)
+        if crossing[iv]==False and inserting_area[iv]>0.1:
+            K_delta_opened.append(K_delta[iv])
+            gamma_mean_opened.append(np.mean(gammas))
+            gamma_max_opened.append(np.max(gammas))
+        elif crossing[iv]==False and inserting_area[iv]<0.1:
+            K_delta_closed.append(K_delta[iv])
+            gamma_mean_closed.append(np.mean(gammas))
+            gamma_max_closed.append(np.max(gammas))
+    #======= now er get to plotting histogram
+    font = {'family' : 'tahoma',
+        'weight' : 'normal',
+        'size'   : 12}
+    plt.rc('font', **font)
+    #ls = 'dotted'
+
+    n_rows, n_cols = 3, 2
+    panel_length_w, panel_length_h = 6, 6#3.38 #inches, equivalent to 8.6 centimeters
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_rows*panel_length_w, n_cols*panel_length_h))
+    #===== average of line tensions
+    ax = axes.flat[0]
+    ax.hist(gamma_mean_opened, bins='auto', density=False)
+    ax.set_title("3-fold verteices with cell insertion")
+    ax.set_xlabel("$<\gamma_v>$")
+    ax.set_ylabel("Vertex count")
+    ax = axes.flat[1]
+    ax.hist(gamma_mean_closed, bins='auto', density=False)
+    ax.set_title("3-fold verteices without cell insertion")
+    ax.set_xlabel("$<\gamma_v>$")
+    ax.set_ylabel("Vertex count")
+    #====== max of line tensions
+    ax = axes.flat[2]
+    ax.hist(gamma_max_opened, bins='auto', density=False)
+    ax.set_xlabel("$\gamma_{max}$")
+    ax.set_ylabel("Vertex count")
+    ax = axes.flat[3]
+    ax.hist(gamma_max_closed, bins='auto', density=False)
+    ax.set_xlabel("$\gamma_{max}$")
+    ax.set_ylabel("Vertex count")
+    #====== k_delta
+    ax = axes.flat[4]
+    ax.hist(K_delta_opened, bins='auto', density=False)
+    ax.set_xlabel("$K_\delta$")
+    ax.set_ylabel("Vertex count")
+    ax = axes.flat[5]
+    ax.hist(K_delta_closed, bins='auto', density=False)
+    ax.set_xlabel("$K_\delta$")
+    ax.set_ylabel("Vertex count")
+    #=== saving
+    plt.tight_layout()
+    plt.savefig(saving_address+'histgramplots.pdf')
     plt.close()
