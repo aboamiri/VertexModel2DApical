@@ -163,6 +163,104 @@ def plot_cell_edges(tail_edges, dl_edges, image_name):
     plt.savefig(image_name, dpi=300)
     plt.close()
 
+def visualize_frame_edges_jsonfile(datafile, edge_data_name, image_name, color_type):
+
+    font = {'family' : 'tahoma',
+            'weight' : 'normal',
+            'size'   : 16}
+    plt.rc('font', **font)
+
+    #fig = plt.figure(figsize=(17,9.5))
+    fig = plt.figure(figsize=(16,11))
+    ax = fig.add_subplot(1, 1, 1)
+    patches = []
+    with open(datafile, 'r') as fp:
+        data = json.load(fp)
+
+    ver_list = data["vertices"]
+    tissue_edges = data["edges"]
+
+    #plotting line tension
+    edge_data = np.loadtxt(edge_data_name)
+    line_coords = []
+    edge_colors = []
+    for te, e_val in zip(tissue_edges, edge_data):
+        crosses, t_id, h_id, t_qx, t_qy, h_qx, h_qy, tension, c1_id, c2_id = te[0], te[1], te[2], te[3], te[4], te[5], te[6], te[7], te[8], te[9]
+        cross2 = abs(t_qx - h_qx)# + abs(h_qx-h_qy)
+        cross3 = abs(t_qy - h_qy)
+        #cross2 = abs(t_qx)+abs(t_qy)+abs(h_qx)+abs(h_qy)
+        if crosses or cross2 or cross3:
+            continue
+        else:
+            line_coords.append([(ver_list[t_id][0], ver_list[t_id][1]), (ver_list[h_id][0], ver_list[h_id][1])])
+            #edge_colors.append(tension)
+            edge_colors.append(e_val)
+
+    lc = LineCollection(line_coords, array=np.array(edge_colors), cmap=plt.cm.jet, alpha=0.9, linewidths=3)
+    ax.add_collection(lc)
+    lcc = plt.colorbar(lc)
+    #lcc.ax.set_title('$\gamma$')
+    lcc.ax.set_title('$l_f/l_i$')
+
+    cells_bdry_crossing = data["cells_bdry_crossing"]
+    num_polygons = len(data["cells"])#data["n_cells"]
+
+    nematic_coords = []
+    nematic_colors = []
+    for cid in range(num_polygons):
+        if cells_bdry_crossing[cid]:
+            continue
+        c_edges = data["cells"][cid]
+        #c_verts =  get_cell_vertices(c_edges, data["edges"], data["vertices"], data["box_size"][0], data["box_size"][1])
+        Q_val, Q_vec, cell_cent = get_cell_elongation(c_edges)
+        Q_val = np.real(Q_val)
+        Q_vec = np.real(Q_vec)
+        Q_tail, Q_head = cell_cent-3.0*Q_val*Q_vec, cell_cent+3.0*Q_val*Q_vec
+        nematic_coords.append([(Q_tail[0], Q_tail[1]), (Q_head[0], Q_head[1])])
+        #nematic_colors.append(np.real(Q_val))
+    #print(nematic_coords)
+    lqc = LineCollection(nematic_coords, cmap=plt.cm.rainbow, alpha=0.6, linewidths=2)
+    lqc.set_color("black")
+    ax.add_collection(lqc)
+
+    poly_class = []
+    for cid in range(num_polygons):
+        if cells_bdry_crossing[cid]:
+            continue
+        c_edges = data["cells"][cid]
+        num_sides = len(c_edges)
+        poly_class.append(num_sides)
+        #c_verts =  get_cell_vertices(c_edges, data["edges"], data["vertices"], data["box_size"][0], data["box_size"][1])
+        polygon = Polygon(np.array(c_edges))#, True)
+        patches.append(polygon)
+    p = PatchCollection(patches, cmap=matplotlib.cm.jet, alpha=0.05)
+
+
+    if color_type=='probing':
+            colors = data["probing_k"]
+            x = [v[0] for v in ver_list]
+            y = [v[1] for v in ver_list]
+            v_area = 30*np.ones(len(colors))
+            sc = ax.scatter(x, y, s=v_area, c=colors, norm=mcolors.LogNorm())#, alpha=0.0)
+            #clb = plt.colorbar(sc)
+            #clb.ax.set_title('$k_\delta$')
+
+
+    # Turn off tick labels
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+
+    #cbaxes = fig.add_axes([0.8, 0.1, 0.03, 0.8])
+    #clb = plt.colorbar(p, shrink=0.5, cax = cbaxes)
+    #clb = plt.colorbar(p,shrink=0.5)
+    #clb.ax.set_title('cell area')
+    plt.xlim([-0.2,0.02+data["box_size"][0]])
+    plt.ylim([-0.12,0.07+data["box_size"][1]])
+    plt.tight_layout()
+    plt.savefig(image_name, dpi=300)
+    plt.close()
+
+
 def visualize_frame_jsonfile(datafile, image_name, color_type):
     if color_type=='d2W_dv2' or color_type=='dW_dh' or color_type=='probing' or color_type=='opening_area':
         fig = plt.figure(figsize=(17,9.5))

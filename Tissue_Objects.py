@@ -427,7 +427,7 @@ class Cell:
             e_ct = e_ct + 1
 
         self.center = self.center/len(self.ListEdges)
-        self.area = self.area + 0.5 * areaVec.dot(Point(0,0,1))
+        self.area = 0.5 * areaVec.dot(Point(0,0,1))
 
 
 # ----- Tissue class ------
@@ -804,13 +804,18 @@ class Tissue:
             return e1.c2
 
     def open_vertex_to_cell(self, v, inserting_gamma):
+        l_i = 0.015
+        if len(v.connectedEdges)==3:
+            l_i=0.015
+        elif len(v.connectedEdges)==4:
+            l_i = 0.00987#0.012
         v_coord = v.coord
         self.ListVertex.remove(v)
         v.order_connected_edges()
         new_vert_coords = []
         #self.delta_l
         for e in v.connectedEdges:
-            nv_coord = e.get_vertex_opening_along(v_coord, v, 0.015)
+            nv_coord = e.get_vertex_opening_along(v_coord, v, l_i)
             new_vert_coords.append(nv_coord)
         new_cell_listEdges = []
         new_cell = Cell(self.max_cell_id()+1, 1, self.Kc, self.A0c, inserting_gamma, self.Gc)
@@ -853,6 +858,22 @@ class Tissue:
             c.update_geometric_info()
         self.update_vertex_connections()
 
+        #In case you want to scale the opening cell area
+        #A_n = 0.015*0.015
+        #new_cell.update_geometric_info()
+        #A_c = new_cell.area
+        #c_cent = Point(0,0,0)
+        #for v in new_cell.ListVertices:
+        #    c_cent = c_cent + v.coord
+        #c_cent = c_cent/len(new_cell.ListVertices)
+        #print("init area: ", A_c)
+        #for v in new_cell.ListVertices:
+        #    vi = v.coord - c_cent
+        #    sf = np.sqrt(A_n/A_c)
+            #v.coord = v.coord/sf
+        #    v.coord = c_cent + Point(vi.x/sf, vi.y/sf, 0)
+        #new_cell.update_geometric_info()
+        #print("the are of new cell: ", new_cell.area)
 
 
     def update_derivatives_analytically(self):

@@ -47,6 +47,33 @@ def run_simulation(Nx, Ny, Ta, Kc, A0c, Gc, sim_type, n_steps, dt, inserting_gam
         os.makedirs(str(inserting_gamma)+"/images")
 
     T = Tissue(Ta, Kc, A0c, Gc)
+
+    if sim_type=='edge_collapse':
+        T.build_tissue_from_file("data/T_final.json")
+
+        delta_gamma = 0.2 * T.Ta
+        el_ratio = []
+        e_lengths = []
+        e_tensions = []
+        for i in range(len(T.ListEdge)):
+            T.is_with_T1_trans = False
+            e = T.ListEdge[i]
+            e.get_dl()
+            e_i = e.length
+            e_lengths.append(e_i)
+            e_tensions.append(e.lineTension)
+            e.lineTension = e.lineTension + delta_gamma
+            T.minimize_dynamically(3000, 0.1, 0, False, False)
+            e.get_dl()
+            e_f = e.length
+            print(i, e_i, e_f, e_f/e_i)
+            el_ratio.append(e_f/e_i)
+            T.build_tissue_from_file("data/T_final.json")
+        np.savetxt("edges_collapse.txt", el_ratio, fmt="%.3f")
+        np.savetxt("edges_lengths.txt", e_lengths, fmt="%.3f")
+        np.savetxt("edges_tensions.txt", e_tensions, fmt="%.3f")
+        return T, []
+
     T.create_hexagonal_tissue(Nx, Ny, Kc, A0c, Ta, Gc)
     T.update_derivatives_analytically()
 

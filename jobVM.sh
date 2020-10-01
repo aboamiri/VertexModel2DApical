@@ -18,13 +18,13 @@
 #SBATCH --cpus-per-task 1
 
 # setting memory requirements
-#SBATCH --mem-per-cpu 1024
+#SBATCH --mem-per-cpu 2048
 
 # propagating max time for job to run
-#SBATCH --time 10:00:00
+#SBATCH --time 30:00:00
 
 # Setting the name for the job
-#SBATCH --job-name randomtension
+#SBATCH --job-name edgecol
 
 # setting notifications for job
 # accepted values are ALL, BEGIN, END, FAIL, REQUEUE
@@ -52,8 +52,8 @@
 
 # if needed load modules here
 #module load <module_name>
-module load anaconda3
-module load python3
+#module load anaconda3
+module load python3  
 
 # if needed add export variables here
 
@@ -62,7 +62,7 @@ module load python3
 # run the program
 #
 ################
-srun python runcard.py check_vertex_opening 18 0.02 10000 0.1 0.022
+srun python runcard.py edge_collapse 14 0.02 2000 0.1 0.02
 #$scratch/ /home/aamiri/Documents/VertexModel/y2019/overlap
 
 # copy results to data
